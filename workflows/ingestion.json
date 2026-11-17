@@ -1,0 +1,295 @@
+{
+  "name": "IKEA - Kaynak Indeksleme",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3563058e-df2f-4b2a-bfb8-1388754cf2d8",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      source_name: \"IKEA Türkiye - Hizmetler\",\n      source_url: \"https://www.ikea.com.tr/hizmetler\"\n    }\n  },\n  {\n    json: {\n      source_name: \"IKEA Türkiye - Mağazadan Teslim Al\",\n      source_url:\n        \"https://www.ikea.com.tr/evden-alisveris-yap-magazadan-teslim-al\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "cafaa4c7-3aa0-4ed3-a963-d978d35ed2ec",
+      "name": "Kaynak Listesi"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.source_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "html"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "f120c0fd-6ab8-4d7b-b3f3-db4be3ee7ec5",
+      "name": "Kaynak Sayfalari Getir"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "dataPropertyName": "html",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "text",
+              "cssSelector": "body",
+              "skipSelectors": "script, style, noscript, nav, header, footer"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "17b67b05-f8e1-4fa3-8fa3-7f4dfd8ecadf",
+      "name": "Sayfa Metnini Cikar"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = $(\"Kaynak Listesi\").all();\nconst pages = $input.all();\n\nif (pages.length !== sources.length) {\n  throw new Error(\"Kaynak sayısı ile alınan sayfa sayısı eşleşmiyor.\");\n}\n\nreturn pages.map((page, index) => {\n  const source = sources[index].json;\n\n  const text = String(page.json.text ?? \"\")\n    .replace(/\\\\r\\\\n|\\\\n|\\\\r/g, \"\\n\")\n    .replace(/\\[(?:https?:\\/\\/|\\/)[^\\]]*\\]/g, \"\")\n    .replace(/[ \\t]+/g, \" \")\n    .replace(/\\n\\s*\\n/g, \"\\n\\n\")\n    .trim();\n\n  if (!text) {\n    throw new Error(`Kaynak metni boş: ${source.source_name}`);\n  }\n\n  return {\n    json: {\n      source_name: source.source_name,\n      source_url: source.source_url,\n      text,\n      character_count: text.length\n    },\n    pairedItem: {\n      item: index\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "cad1da26-3bb1-4d27-a7a7-df5dc08c20d4",
+      "name": "Dokumanlari Hazirla"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        304
+      ],
+      "id": "8e24c5d6-ce7e-4241-a34e-96443553f9c1",
+      "name": "Embeddings Google Gemini"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        1440,
+        16
+      ],
+      "id": "f96a95b3-01a7-493d-8145-1fcb625ef18f",
+      "name": "IKEA Supabase"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "4b6956c5-f52a-4212-8949-42e628c0fc0c",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "source_name",
+                "value": "={{ $json.source_name }}"
+              },
+              {
+                "name": "source_url",
+                "value": "={{ $json.source_url }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        320
+      ],
+      "id": "3d6d7ffc-0dbd-48c9-9145-731d48fe711d",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkSize": 800,
+        "chunkOverlap": 100,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        528
+      ],
+      "id": "757f61b4-c02c-459a-ac84-cc1f8eff8de7",
+      "name": "Recursive Character Text Splitter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Kaynak Listesi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kaynak Listesi": {
+      "main": [
+        [
+          {
+            "node": "Kaynak Sayfalari Getir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kaynak Sayfalari Getir": {
+      "main": [
+        [
+          {
+            "node": "Sayfa Metnini Cikar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sayfa Metnini Cikar": {
+      "main": [
+        [
+          {
+            "node": "Dokumanlari Hazirla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dokumanlari Hazirla": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "IKEA Supabase",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "IKEA Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IKEA Supabase": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "IKEA Supabase",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  }
+}
