@@ -54,7 +54,7 @@ The prompt instructs the model to:
 6. Run the ingestion workflow to populate the database.
 7. Open the chat workflow and test it using the Chat Trigger.
 
-The exported workflows do not include credentials or database contents. Database setup SQL is not yet included in this repository.
+The exported workflows do not include credentials or database contents. Run sql/setup.sql in the Supabase SQL Editor to create the documents table and vector search function.
 
 ## Example Evaluation
 
